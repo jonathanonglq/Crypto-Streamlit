@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import boto3
+import io
 from st_files_connection import FilesConnection
 import plotly.express as px
 import plotly.graph_objects as go
@@ -7,14 +9,25 @@ import plotly.graph_objects as go
 st.set_page_config(layout="wide")
 view = st.sidebar.selectbox("Choose dashboard view:", ["Overview Analysis", "Affiliate Analysis", "New View (Coming Soon)"])
 
-def load_data(file_name):
-    conn = st.connection('s3', type=FilesConnection)
-    df = conn.read(file_name, input_format="csv", ttl=600)
-    return df
+# def load_data(file_name):
+#     conn = st.connection('s3', type=FilesConnection)
+#     df = conn.read(file_name, input_format="csv", ttl=600)
+#     return df
+
+s3 = boto3.client(
+    "s3",
+    aws_access_key_id=st.secrets["AWS_ACCESS_KEY_ID"],
+    aws_secret_access_key=st.secrets["AWS_SECRET_ACCESS_KEY"],
+    region_name=st.secrets["AWS_DEFAULT_REGION"]
+)
+
+def load_data(key):
+    response = s3.get_object(Bucket="thorchain-data", Key=key)
+    return pd.read_csv(io.BytesIO(response["Body"].read()))
 
 def show_overview():
     
-    df_overview = load_data("thorchain-data/thorchain_overview.csv")
+    df_overview = load_data("thorchain_overview.csv")
     df_overview["month_name"] = pd.Categorical(df_overview["month_name"], ordered=True, categories=df_overview["month_name"][::-1])
     df_overview = df_overview.sort_values("month_name") 
 
@@ -164,7 +177,7 @@ def show_overview():
 
     st.markdown("### 🧩 Daily Share of Swap Volume by User Type")
 
-    df_users = load_data("thorchain-data/thorchain_users.csv")
+    df_users = load_data("thorchain_users.csv")
     df_users["date"] = pd.to_datetime(df_users["date"])
     df_daily = df_users.groupby(["date", "type"])["amount"].sum().reset_index()
 
@@ -196,11 +209,11 @@ def show_overview():
 def show_affiliate_view():
     # --- Load Data ---
 
-    df_fee = load_data("thorchain-data/thorchain_affiliate_fee.csv")
+    df_fee = load_data("thorchain_affiliate_fee.csv")
     df_fee = df_fee[["affiliates", "affiliate_fee"]]
     df_fee = df_fee.sort_values(by="affiliate_fee", ascending=False)
 
-    df_vol = load_data("thorchain-data/thorchain_affiliate_volume.csv")
+    df_vol = load_data("thorchain_affiliate_volume.csv")
     df_vol = df_vol[["affiliates", "volume", "volume_growth"]]
     df_vol = df_vol.sort_values(by="volume", ascending=False)
 
